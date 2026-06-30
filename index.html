@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FieldMap">
+  <meta name="theme-color" content="#16213e">
+  <link rel="manifest" href="manifest.json">
+  <title>FieldMap</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    #toolbar h1 {
+      font-size: 17px;
+      font-weight: 600;
+      color: #e94560;
+      flex: 1;
+    }
+
+    .btn {
+      background: #0f3460;
+      color: #e0e0e0;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { opacity: 0.7; }
+    .btn.accent { background: #e94560; color: #fff; }
+
+    #map-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      touch-action: none;
+      background: #0a0a1a;
+    }
+
+    #map-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      transform-origin: 0 0;
+      cursor: grab;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    #map-canvas:active { cursor: grabbing; }
+
+    #gps-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
+      transform-origin: 0 0;
+    }
+
+    #status-bar {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(22,33,62,0.92);
+      border: 1px solid #0f3460;
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: #aaa;
+      pointer-events: none;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+    }
+
+    #center-btn {
+      position: absolute;
+      bottom: 60px;
+      right: 16px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #e94560;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      -webkit-tap-highlight-color: transparent;
+    }
+    #center-btn svg { width: 24px; height: 24px; fill: white; }
+    #center-btn:active { opacity: 0.8; }
+
+    #splash {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: #1a1a2e;
+      z-index: 20;
+      padding: 32px;
+      text-align: center;
+    }
+    #splash h2 { font-size: 26px; color: #e94560; }
+    #splash p { color: #888; line-height: 1.6; max-width: 300px; }
+
+    #upload-area {
+      border: 2px dashed #0f3460;
+      border-radius: 16px;
+      padding: 32px 40px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      width: 100%;
+      max-width: 320px;
+    }
+    #upload-area:hover, #upload-area.drag-over {
+      border-color: #e94560;
+      background: rgba(233,69,96,0.05);
+    }
+    #upload-area .icon { font-size: 48px; margin-bottom: 12px; }
+    #upload-area p { color: #aaa; font-size: 15px; }
+    #upload-area strong { color: #e0e0e0; }
+    #file-input { display: none; }
+
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(26,26,46,0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 30;
+      display: none;
+    }
+    #loading-overlay.visible { display: flex; }
+
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #0f3460;
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #progress-text { color: #aaa; font-size: 14px; }
+    #progress-bar-wrap {
+      width: 200px; height: 6px;
+      background: #0f3460; border-radius: 3px; overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%; width: 0%;
+      background: #e94560;
+      transition: width 0.2s;
+    }
+
+    #error-toast {
+      position: absolute;
+      top: 70px; left: 50%;
+      transform: translateX(-50%);
+      background: #c0392b;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 50;
+      display: none;
+      max-width: 90vw;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>⛰ FieldMap</h1>
+  <button class="btn" id="load-btn">📂 Load Map</button>
+  <input type="file" id="file-input" accept=".tif,.tiff">
+</div>
+
+<div id="map-container">
+  <canvas id="map-canvas"></canvas>
+  <canvas id="gps-canvas"></canvas>
+
+  <div id="splash">
+    <h2>FieldMap</h2>
+    <p>Offline GeoTIFF viewer with live GPS. Works without internet once loaded.</p>
+    <div id="upload-area">
+      <div class="icon">🗺️</div>
+      <p><strong>Tap to load your GeoTIFF</strong><br>(.tif / .tiff)</p>
+    </div>
+    <p style="font-size:12px;color:#555">Map is stored on-device for offline use</p>
+  </div>
+
+  <button id="center-btn" title="Center on GPS">
+    <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>
+  </button>
+
+  <div id="status-bar">No map loaded</div>
+</div>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div id="progress-text">Loading…</div>
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+</div>
+
+<div id="error-toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+const DB_NAME = 'fieldmap-db', DB_STORE = 'maps', DB_KEY = 'current';
+let mapCanvas, gpsCanvas, mapCtx, gpsCtx;
+let mapWidth = 0, mapHeight = 0;        // original TIFF pixel dimensions
+let geoTransform = null;                // [originX, scaleX, originY, scaleY] in map CRS
+let toWGS84 = null, fromWGS84 = null;   // proj4 functions
+let viewX = 0, viewY = 0, viewScale = 1; // pan/zoom state
+let gpsPos = null;                       // {lat, lon}
+let watchId = null;
+let gpsAccuracy = null;
+let containerW = 0, containerH = 0;
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  mapCanvas = document.getElementById('map-canvas');
+  gpsCanvas = document.getElementById('gps-canvas');
+  mapCtx = mapCanvas.getContext('2d');
+  gpsCtx = gpsCanvas.getContext('2d');
+
+  const container = document.getElementById('map-container');
+  const ro = new ResizeObserver(() => {
+    containerW = container.clientWidth;
+    containerH = container.clientHeight;
+    gpsCanvas.width = containerW;
+    gpsCanvas.height = containerH;
+    drawGPS();
+  });
+  ro.observe(container);
+
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
+  // Wire up file inputs
+  document.getElementById('file-input').addEventListener('change', e => {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+  document.getElementById('load-btn').addEventListener('click', () =>
+    document.getElementById('file-input').click()
+  );
+  document.getElementById('upload-area').addEventListener('click', () =>
+    document.getElementById('file-input').click()
+  );
+
+  // Drag-and-drop on upload area
+  const uploadArea = document.getElementById('upload-area');
+  uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+  uploadArea.addEventListener('drop', e => {
+    e.preventDefault(); uploadArea.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  // Center on GPS button
+  document.getElementById('center-btn').addEventListener('click', centerOnGPS);
+
+  // Touch/mouse pan & zoom
+  setupInteraction();
+
+  // Try loading previously saved map
+  const saved = await dbGet();
+  if (saved) {
+    await renderTiff(saved.blob, saved.meta);
+  }
+
+  // Start GPS
+  startGPS();
+});
+
+// ─── File Loading ─────────────────────────────────────────────────────────────
+async function loadFile(file) {
+  if (!file.name.match(/\.tiff?$/i)) {
+    showError('Please select a .tif or .tiff file');
+    return;
+  }
+  showLoading('Reading file…', 5);
+  try {
+    const arrayBuffer = await readFileWithProgress(file);
+    showLoading('Parsing GeoTIFF…', 30);
+    const meta = await extractMeta(arrayBuffer);
+    showLoading('Rendering map…', 60);
+    const blob = new Blob([arrayBuffer], { type: 'image/tiff' });
+    await renderTiff(blob, meta);
+    showLoading('Saving for offline…', 90);
+    await dbPut({ blob, meta });
+    hideLoading();
+  } catch (err) {
+    hideLoading();
+    showError('Failed to load map: ' + err.message);
+    console.error(err);
+  }
+}
+
+function readFileWithProgress(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onprogress = e => {
+      if (e.lengthComputable) {
+        const pct = 5 + Math.round((e.loaded / e.total) * 20);
+        showLoading('Reading file…', pct);
+      }
+    };
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ─── GeoTIFF Parsing ─────────────────────────────────────────────────────────
+async function extractMeta(arrayBuffer) {
+  const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+  const image = await tiff.getImage();
+  const width = image.getWidth();
+  const height = image.getHeight();
+
+  // Geo transform
+  const tiepoints = image.getTiePoints();   // [{x,y,z,i,j,k}]
+  const pixelScale = image.getFileDirectory().ModelPixelScale;
+  const modelTransform = image.getFileDirectory().ModelTransformation;
+
+  let originX, originY, scaleX, scaleY;
+
+  if (tiepoints && tiepoints.length > 0 && pixelScale) {
+    const tp = tiepoints[0];
+    originX = tp.x - tp.i * pixelScale[0];
+    originY = tp.y + tp.j * pixelScale[1];
+    scaleX = pixelScale[0];
+    scaleY = pixelScale[1];
+  } else if (modelTransform) {
+    // 4x4 affine in row-major order
+    originX = modelTransform[3];
+    originY = modelTransform[7];
+    scaleX = modelTransform[0];
+    scaleY = -modelTransform[5];
+  } else {
+    throw new Error('GeoTIFF has no georeferencing data (no tiepoints/pixel scale)');
+  }
+
+  // CRS from GeoKeys
+  const geoKeys = image.getGeoKeys();
+  let epsg = null;
+  if (geoKeys) {
+    // Projected CRS takes priority
+    epsg = geoKeys.ProjectedCSTypeGeoKey || geoKeys.GeographicTypeGeoKey || null;
+  }
+
+  // Render raster
+  const rasterData = await image.readRasters({ interleave: true });
+  const samplesPerPixel = image.getSamplesPerPixel();
+  const bitsPerSample = image.getFileDirectory().BitsPerSample[0];
+
+  return { width, height, originX, originY, scaleX, scaleY, epsg, rasterData, samplesPerPixel, bitsPerSample };
+}
+
+// ─── Rendering ───────────────────────────────────────────────────────────────
+async function renderTiff(blob, meta) {
+  const { width, height, originX, originY, scaleX, scaleY, epsg, rasterData, samplesPerPixel, bitsPerSample } = meta;
+
+  mapWidth = width;
+  mapHeight = height;
+  geoTransform = { originX, originY, scaleX, scaleY };
+
+  // Set up projection
+  setupProjection(epsg);
+
+  // Render raster to offscreen canvas then copy
+  showLoading('Rendering pixels…', 65);
+  const offscreen = new OffscreenCanvas(width, height);
+  const octx = offscreen.getContext('2d');
+  const imgData = octx.createImageData(width, height);
+  const pixels = imgData.data;
+
+  const maxVal = bitsPerSample === 16 ? 65535 : bitsPerSample === 32 ? 4294967295 : 255;
+
+  if (samplesPerPixel >= 3) {
+    // RGB / RGBA
+    for (let i = 0; i < width * height; i++) {
+      const r = Math.round((rasterData[i * samplesPerPixel]     / maxVal) * 255);
+      const g = Math.round((rasterData[i * samplesPerPixel + 1] / maxVal) * 255);
+      const b = Math.round((rasterData[i * samplesPerPixel + 2] / maxVal) * 255);
+      const a = samplesPerPixel >= 4 ? Math.round((rasterData[i * samplesPerPixel + 3] / maxVal) * 255) : 255;
+      pixels[i * 4]     = r;
+      pixels[i * 4 + 1] = g;
+      pixels[i * 4 + 2] = b;
+      pixels[i * 4 + 3] = a;
+    }
+  } else {
+    // Grayscale — stretch to 0-255
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < rasterData.length; i++) {
+      if (rasterData[i] < min) min = rasterData[i];
+      if (rasterData[i] > max) max = rasterData[i];
+    }
+    const range = max - min || 1;
+    for (let i = 0; i < width * height; i++) {
+      const v = Math.round(((rasterData[i] - min) / range) * 255);
+      pixels[i * 4]     = v;
+      pixels[i * 4 + 1] = v;
+      pixels[i * 4 + 2] = v;
+      pixels[i * 4 + 3] = 255;
+    }
+  }
+
+  showLoading('Drawing map…', 85);
+  octx.putImageData(imgData, 0, 0);
+
+  // Transfer to main canvas
+  mapCanvas.width = width;
+  mapCanvas.height = height;
+  mapCtx.drawImage(offscreen, 0, 0);
+
+  // Fit to screen
+  fitToScreen();
+
+  // Hide splash
+  document.getElementById('splash').style.display = 'none';
+  updateStatus();
+}
+
+function setupProjection(epsg) {
+  toWGS84 = null;
+  fromWGS84 = null;
+  if (!epsg || epsg === 4326) return; // already WGS84
+
+  // Check proj4 knows this code
+  try {
+    const fwd = proj4('EPSG:' + epsg, 'EPSG:4326');
+    toWGS84 = (x, y) => {
+      const [lon, lat] = proj4('EPSG:' + epsg, 'EPSG:4326', [x, y]);
+      return { lat, lon };
+    };
+    fromWGS84 = (lat, lon) => {
+      const [x, y] = proj4('EPSG:4326', 'EPSG:' + epsg, [lon, lat]);
+      return { x, y };
+    };
+  } catch (e) {
+    // proj4 doesn't know this EPSG — try common ones
+    if (epsg >= 32601 && epsg <= 32660) {
+      // WGS84 UTM North
+      const zone = epsg - 32600;
+      const def = `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs`;
+      proj4.defs('EPSG:' + epsg, def);
+    } else if (epsg >= 32701 && epsg <= 32760) {
+      // WGS84 UTM South
+      const zone = epsg - 32700;
+      const def = `+proj=utm +zone=${zone} +south +datum=WGS84 +units=m +no_defs`;
+      proj4.defs('EPSG:' + epsg, def);
+    }
+    try {
+      toWGS84 = (x, y) => {
+        const [lon, lat] = proj4('EPSG:' + epsg, 'EPSG:4326', [x, y]);
+        return { lat, lon };
+      };
+      fromWGS84 = (lat, lon) => {
+        const [x, y] = proj4('EPSG:4326', 'EPSG:' + epsg, [lon, lat]);
+        return { x, y };
+      };
+    } catch (e2) {
+      console.warn('Unknown projection EPSG:' + epsg + ', assuming WGS84');
+    }
+  }
+}
+
+// ─── Coordinate Math ──────────────────────────────────────────────────────────
+function latlonToPixel(lat, lon) {
+  if (!geoTransform) return null;
+  const { originX, originY, scaleX, scaleY } = geoTransform;
+
+  let mapX = lon, mapY = lat;
+  if (fromWGS84) {
+    const r = fromWGS84(lat, lon);
+    mapX = r.x; mapY = r.y;
+  }
+
+  const px = (mapX - originX) / scaleX;
+  const py = (originY - mapY) / scaleY;
+  return { px, py };
+}
+
+// ─── View Transform ───────────────────────────────────────────────────────────
+function applyTransform() {
+  mapCanvas.style.transform = `translate(${viewX}px, ${viewY}px) scale(${viewScale})`;
+  gpsCanvas.style.transform = 'none'; // GPS canvas is in screen space
+}
+
+function fitToScreen() {
+  const scaleX = containerW / mapWidth;
+  const scaleY = containerH / mapHeight;
+  viewScale = Math.min(scaleX, scaleY) * 0.95;
+  viewX = (containerW - mapWidth * viewScale) / 2;
+  viewY = (containerH - mapHeight * viewScale) / 2;
+  applyTransform();
+  drawGPS();
+}
+
+function centerOnGPS() {
+  if (!gpsPos || !geoTransform) return;
+  const p = latlonToPixel(gpsPos.lat, gpsPos.lon);
+  if (!p) return;
+  // We want p.px * viewScale + viewX = containerW/2
+  viewX = containerW / 2 - p.px * viewScale;
+  viewY = containerH / 2 - p.py * viewScale;
+  applyTransform();
+  drawGPS();
+}
+
+// ─── GPS Dot ─────────────────────────────────────────────────────────────────
+function drawGPS() {
+  gpsCtx.clearRect(0, 0, containerW, containerH);
+  if (!gpsPos || !geoTransform) return;
+
+  const p = latlonToPixel(gpsPos.lat, gpsPos.lon);
+  if (!p) return;
+
+  // Convert map pixel to screen pixel
+  const sx = p.px * viewScale + viewX;
+  const sy = p.py * viewScale + viewY;
+
+  // Out of view check
+  const margin = 40;
+  const inView = sx > -margin && sx < containerW + margin && sy > -margin && sy < containerH + margin;
+
+  if (inView) {
+    // Accuracy circle (if reasonable)
+    if (gpsAccuracy && fromWGS84) {
+      // rough pixel radius from accuracy in metres — approximate
+      const metersPerDeg = 111320;
+      const accDeg = gpsAccuracy / metersPerDeg;
+      const { px: px2 } = latlonToPixel(gpsPos.lat, gpsPos.lon + accDeg) || { px: p.px + 1 };
+      const accRadius = Math.abs(px2 - p.px) * viewScale;
+      if (accRadius > 4 && accRadius < 500) {
+        gpsCtx.beginPath();
+        gpsCtx.arc(sx, sy, accRadius, 0, Math.PI * 2);
+        gpsCtx.fillStyle = 'rgba(233,69,96,0.12)';
+        gpsCtx.fill();
+        gpsCtx.strokeStyle = 'rgba(233,69,96,0.4)';
+        gpsCtx.lineWidth = 1;
+        gpsCtx.stroke();
+      }
+    }
+
+    // Pulse ring
+    gpsCtx.beginPath();
+    gpsCtx.arc(sx, sy, 14, 0, Math.PI * 2);
+    gpsCtx.fillStyle = 'rgba(233,69,96,0.2)';
+    gpsCtx.fill();
+
+    // Dot
+    gpsCtx.beginPath();
+    gpsCtx.arc(sx, sy, 8, 0, Math.PI * 2);
+    gpsCtx.fillStyle = '#e94560';
+    gpsCtx.fill();
+    gpsCtx.strokeStyle = 'white';
+    gpsCtx.lineWidth = 2.5;
+    gpsCtx.stroke();
+  } else {
+    // Arrow pointing toward GPS
+    const angle = Math.atan2(sy - containerH / 2, sx - containerW / 2);
+    const edgeX = containerW / 2 + Math.cos(angle) * (Math.min(containerW, containerH) / 2 - 32);
+    const edgeY = containerH / 2 + Math.sin(angle) * (Math.min(containerW, containerH) / 2 - 32);
+
+    gpsCtx.save();
+    gpsCtx.translate(edgeX, edgeY);
+    gpsCtx.rotate(angle);
+    gpsCtx.beginPath();
+    gpsCtx.moveTo(16, 0);
+    gpsCtx.lineTo(-10, 10);
+    gpsCtx.lineTo(-10, -10);
+    gpsCtx.closePath();
+    gpsCtx.fillStyle = '#e94560';
+    gpsCtx.fill();
+    gpsCtx.restore();
+  }
+}
+
+function startGPS() {
+  if (!('geolocation' in navigator)) {
+    setStatus('GPS not available');
+    return;
+  }
+  watchId = navigator.geolocation.watchPosition(
+    pos => {
+      gpsPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      gpsAccuracy = pos.coords.accuracy;
+      drawGPS();
+      updateStatus();
+    },
+    err => {
+      setStatus('GPS: ' + (err.code === 1 ? 'permission denied' : 'unavailable'));
+    },
+    { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+  );
+}
+
+function updateStatus() {
+  const parts = [];
+  if (gpsPos) parts.push(`${gpsPos.lat.toFixed(5)}, ${gpsPos.lon.toFixed(5)}`);
+  if (gpsAccuracy) parts.push(`±${Math.round(gpsAccuracy)}m`);
+  if (mapWidth) parts.push(`${mapWidth}×${mapHeight}px`);
+  setStatus(parts.length ? parts.join('  •  ') : 'No map loaded');
+}
+
+function setStatus(msg) {
+  document.getElementById('status-bar').textContent = msg;
+}
+
+// ─── Pan & Zoom ───────────────────────────────────────────────────────────────
+function setupInteraction() {
+  const el = document.getElementById('map-container');
+  let isDragging = false;
+  let lastX = 0, lastY = 0;
+  let lastPinchDist = 0;
+  let lastPinchMidX = 0, lastPinchMidY = 0;
+
+  // Mouse
+  el.addEventListener('mousedown', e => {
+    isDragging = true;
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    viewX += e.clientX - lastX;
+    viewY += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    applyTransform();
+    drawGPS();
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; });
+
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    zoomAt(mx, my, factor);
+  }, { passive: false });
+
+  // Touch
+  let touches = [];
+  el.addEventListener('touchstart', e => {
+    e.preventDefault();
+    touches = Array.from(e.touches);
+    if (touches.length === 1) {
+      lastX = touches[0].clientX; lastY = touches[0].clientY;
+    }
+    if (touches.length === 2) {
+      lastPinchDist = pinchDist(touches);
+      const mid = pinchMid(touches, el);
+      lastPinchMidX = mid.x; lastPinchMidY = mid.y;
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const t = Array.from(e.touches);
+    if (t.length === 1) {
+      viewX += t[0].clientX - lastX;
+      viewY += t[0].clientY - lastY;
+      lastX = t[0].clientX; lastY = t[0].clientY;
+      applyTransform(); drawGPS();
+    }
+    if (t.length === 2) {
+      const dist = pinchDist(t);
+      const mid = pinchMid(t, el);
+      const factor = dist / lastPinchDist;
+      zoomAt(mid.x, mid.y, factor);
+      // also pan by midpoint shift
+      viewX += mid.x - lastPinchMidX;
+      viewY += mid.y - lastPinchMidY;
+      lastPinchDist = dist;
+      lastPinchMidX = mid.x; lastPinchMidY = mid.y;
+      applyTransform(); drawGPS();
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchend', e => {
+    touches = Array.from(e.touches);
+    if (touches.length === 1) {
+      lastX = touches[0].clientX; lastY = touches[0].clientY;
+    }
+  }, { passive: false });
+}
+
+function zoomAt(screenX, screenY, factor) {
+  const minScale = 0.05;
+  const maxScale = 50;
+  const newScale = Math.max(minScale, Math.min(maxScale, viewScale * factor));
+  const actualFactor = newScale / viewScale;
+  viewX = screenX - (screenX - viewX) * actualFactor;
+  viewY = screenY - (screenY - viewY) * actualFactor;
+  viewScale = newScale;
+  applyTransform(); drawGPS();
+}
+
+function pinchDist(t) {
+  const dx = t[1].clientX - t[0].clientX;
+  const dy = t[1].clientY - t[0].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+function pinchMid(t, el) {
+  const rect = el.getBoundingClientRect();
+  return {
+    x: (t[0].clientX + t[1].clientX) / 2 - rect.left,
+    y: (t[0].clientY + t[1].clientY) / 2 - rect.top
+  };
+}
+
+// ─── IndexedDB ────────────────────────────────────────────────────────────────
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbPut(data) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(data, DB_KEY);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbGet() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).get(DB_KEY);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+function showLoading(msg, pct) {
+  const ov = document.getElementById('loading-overlay');
+  ov.classList.add('visible');
+  document.getElementById('progress-text').textContent = msg;
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.remove('visible');
+}
+
+function showError(msg) {
+  const t = document.getElementById('error-toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 4000);
+}
+</script>
+</body>
+</html>
