@@ -128,7 +128,7 @@
 <div id="toolbar">
   <h1>⛰ FieldMap</h1>
   <button class="btn" id="maps-btn">🗺 Maps</button>
-  <input type="file" id="file-input" accept=".fieldmap,.zip">
+  <input type="file" id="file-input">
 </div>
 
 <div id="map"></div>
@@ -246,10 +246,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ─── Import & open maps ───────────────────────────────────────────────────────
 async function importFile(file) {
-  if (!file.name.match(/\.(fieldmap|zip)$/i)) {
-    showError('Please pick a .fieldmap file (made with Convert Map on your computer)');
-    return;
-  }
   showLoading('Reading package…');
   try {
     const buf = await file.arrayBuffer();
