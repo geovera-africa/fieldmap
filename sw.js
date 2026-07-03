@@ -1,10 +1,11 @@
-const CACHE_NAME = 'fieldmap-v1';
+const CACHE_NAME = 'fieldmap-v2';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js'
+  './',
+  './index.html',
+  './manifest.json',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+  'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'
 ];
 
 self.addEventListener('install', e => {
@@ -22,13 +23,14 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
-      if (res && res.status === 200 && (e.request.url.startsWith('https://cdn') || e.request.url.startsWith('https://cdnjs'))) {
+    caches.match(e.request, { ignoreSearch: true }).then(cached => cached || fetch(e.request).then(res => {
+      if (res && res.status === 200) {
         const clone = res.clone();
         caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
       }
       return res;
-    }))
+    }).catch(() => cached))
   );
 });
